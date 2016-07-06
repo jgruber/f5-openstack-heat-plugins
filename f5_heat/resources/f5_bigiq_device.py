@@ -16,7 +16,7 @@
 #
 import logging
 
-from f5.bigip import ManagementRoot
+from f5.bigiq import ManagementRoot
 from heat.common.i18n import _
 from heat.engine import properties
 from heat.engine import resource
@@ -25,13 +25,13 @@ from requests import HTTPError
 from icontrol.session import iControlUnexpectedHTTPError
 
 
-class BigIPConnectionFailed(HTTPError):
+class BigIQConnectionFailed(HTTPError):
     pass
 
 
-class F5BigIPDevice(resource.Resource):
+class F5BigIQDevice(resource.Resource):
     '''
-    Holds BigIP
+    Holds BigIQ
     server, username, password, timeout,
     continue_on_error, delay_between_attempts, max_attempts
     '''
@@ -96,7 +96,7 @@ class F5BigIPDevice(resource.Resource):
         )
     }
 
-    def get_bigip(self):
+    def get_bigiq(self):
         if self.properties[self.CONTINUE_ON_ERROR]:
             number_of_attempts = 0
             while(number_of_attempts < self.properties[self.MAX_ATTEMPTS]):
@@ -124,17 +124,17 @@ class F5BigIPDevice(resource.Resource):
             )
 
     def handle_create(self):
-        '''Create the BigIP resource.
+        '''Create the BigIQ resource.
 
-        Attempt to initialize a bigip connection to test connectivity
+        Attempt to initialize a bigiq connection to test connectivity
 
         raises: BigIPConnectionFailed
         '''
 
         try:
-            self.get_bigip()
+            self.get_bigiq()
         except HTTPError as ex:
-            raise BigIPConnectionFailed(ex)
+            raise BigIQConnectionFailed(ex)
 
         self.resource_id_set(self.physical_resource_name())
 
@@ -145,4 +145,4 @@ class F5BigIPDevice(resource.Resource):
 
 
 def resource_mapping():
-    return {'F5::BigIP::Device': F5BigIPDevice}
+    return {'F5::BigIQ::Device': F5BigIQDevice}
