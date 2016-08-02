@@ -14,6 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import logging
+
+from time import sleep
+
 from heat.common import exception
 from heat.common.i18n import _
 from heat.engine import properties
@@ -34,6 +38,10 @@ class BigIQLicenseTimeout(Exception):
     pass
 
 
+class BigIQLicenseFailure(Exception):
+    pass
+
+
 class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
                                         F5BigIQMixin, F5BigIPMixin):
     '''Manages unmanaged pool members in a F5® BigIQ License Pool.'''
@@ -41,11 +49,17 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
     PROPERTIES = (
         LICENSE_POOL_NAME,
         BIGIQ_SERVER,
-        BIGIP_SERVER
+        BIGIP_SERVER,
+        CONTINUE_ON_ERROR,
+        DELAY_BETWEEN_ATTEMPTS,
+        MAX_ATTEMPTS
     ) = (
         'license_pool_name',
         'bigiq_server',
         'bigip_server',
+        'continue_on_error',
+        'delay_between_attempts',
+        'max_attempts'
     )
 
     properties_schema = {
@@ -63,6 +77,24 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
             properties.Schema.STRING,
             _('Reference to the BigIP server resource.'),
             required=True
+        ),
+        CONTINUE_ON_ERROR: properties.Schema(
+            properties.Schema.BOOLEAN,
+            _('Continue to try and connect despite network errors'),
+            required=False,
+            default=True
+        ),
+        DELAY_BETWEEN_ATTEMPTS: properties.Schema(
+            properties.Schema.INTEGER,
+            _('Seconds to wait between connection attempts'),
+            required=5,
+            default=True
+        ),
+        MAX_ATTEMPTS: properties.Schema(
+            properties.Schema.INTEGER,
+            _('Maximum number of connection attempts to try'),
+            required=False,
+            default=360
         )
     }
 
@@ -98,18 +130,14 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
 
             found_pool = False
             member = None
-
+            target_pool = None
             pools = self.bigiq.cm.shared.licensing.pools_s.get_collection()
             for pool in pools:
                 if pool.name == self.properties[self.LICENSE_POOL_NAME]:
                     self.pooluuid = pool.uuid
-                    member = pool.license_unmanaged_device(
-                        hostname=bigip_hostname,
-                        username=bigip_username,
-                        password=bigip_password
-                    )
-                    self.member = member
+                    target_pool = pool
                     found_pool = True
+                    break
             if not found_pool:
                 raise exception.ResourceFailure(
                     BigIQInvalidLicensePool(
@@ -119,12 +147,40 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
                     None,
                     action='CREATE'
                 )
+
+            if self.properties[self.CONTINUE_ON_ERROR]:
+                number_of_attempts = 0
+                while(number_of_attempts < self.properties[self.MAX_ATTEMPTS]):
+                    try:
+                        member = target_pool.license_unmanaged_device(
+                            hostname=bigip_hostname,
+                            username=bigip_username,
+                            password=bigip_password
+                        )
+                        break
+                    except Exception as le:
+                        logging.ERROR('exception in licensing attempt %s'
+                                      % (le.message))
+                        number_of_attempts += 1
+                    logging.ERROR('sleeping')
+                    sleep(self.properties[self.DELAY_BETWEEN_ATTEMPTS])
+                if member is None:
+                    raise BigIQLicenseFailure(
+                        'Failed after %d attempts'
+                        % self.properties[self.MAX_ATTEMPTS]
+                    )
+            else:
+                member = target_pool.license_unmanaged_device(
+                    hostname=bigip_hostname,
+                    username=bigip_username,
+                    password=bigip_password
+                )
         except Exception as ex:
             raise exception.ResourceFailure(ex, None, action='CREATE')
         finally:
             if member is not None:
+                self.member = member
                 self.resource_id_set(member.uuid)
-
         return self.resource_id
 
     def check_create_complete(self, license_uuid):
@@ -132,6 +188,8 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
         self.member.refresh()
         if self.member.state.lower() == 'licensed':
             return True
+        if self.member.state.lower() == 'failed':
+            raise BigIQLicenseFailure(self.member.errorText)
         return False
 
     @f5_bigip
@@ -143,10 +201,13 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
         '''
         if self.resource_id is not None:
             try:
+                logging.warning('query bigiq for license pools')
                 pools = self.bigiq.cm.shared.licensing.pools_s.get_collection()
+                logging.warning('bigiq returned pool collection')
                 found_pool = False
                 for pool in pools:
                     if pool.name == self.properties[self.LICENSE_POOL_NAME]:
+                        logging.warning('found pool %s' % pool.name)
                         members = pool.members_s.get_collection()
                         for member in members:
                             if member.uuid == self.resource_id:
@@ -158,6 +219,7 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
                                     username=bigip_username,
                                     password=bigip_password
                                 )
+                                return True
                     found_pool = True
                 if not found_pool:
                     raise exception.ResourceFailure(

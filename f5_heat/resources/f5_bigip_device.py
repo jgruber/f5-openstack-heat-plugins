@@ -23,6 +23,7 @@ from heat.engine import resource
 from requests.exceptions import ConnectionError
 from requests import HTTPError
 from icontrol.session import iControlUnexpectedHTTPError
+from time import sleep
 
 
 class BigIPConnectionFailed(HTTPError):
@@ -113,6 +114,10 @@ class F5BigIPDevice(resource.Resource):
                 except iControlUnexpectedHTTPError as icrderror:
                     number_of_attempts += 1
                     logging.warning(icrderror.message)
+                except Exception as readtimeout:
+                    number_of_attempts += 1
+                    logging.warning(readtimeout.message)
+                sleep(self.properties[self.DELAY_BETWEEN_ATTEMPTS])
             raise ConnectionError('Connection failed after %d attempts'
                                   % self.properties[self.MAX_ATTEMPTS])
         else:

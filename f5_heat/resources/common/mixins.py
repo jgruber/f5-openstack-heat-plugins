@@ -27,14 +27,15 @@ def f5_common_resources(func):
 def f5_bigip(func):
     def func_wrapper(self, *args, **kwargs):
         self.get_bigip()
-        func(self, *args, **kwargs)
+        self.set_partition_name()
+        return func(self, *args, **kwargs)
     return func_wrapper
 
 
 def f5_bigiq(func):
     def func_wrapper(self, *args, **kwargs):
         self.get_bigiq()
-        func(self, *args, **kwargs)
+        return func(self, *args, **kwargs)
     return func_wrapper
 
 
@@ -53,9 +54,12 @@ class F5BigIPMixin(object):
         :returns: string partition name
         '''
 
-        refid = self.properties[self.PARTITION]
-        self.partition_name = \
-            self.stack.resource_by_refid(refid).get_partition_name()
+        if not hasattr(self, 'PARTITION'):
+            self.partition_name = 'Common'
+        else:
+            refid = self.properties[self.PARTITION]
+            self.partition_name = \
+                self.stack.resource_by_refid(refid).get_partition_name()
 
 
 class F5BigIQMixin(object):

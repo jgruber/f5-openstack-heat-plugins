@@ -46,12 +46,12 @@ class F5CmSync(resource.Resource, F5BigIPMixin):
         DEVICE_GROUP: properties.Schema(
             properties.Schema.STRING,
             _('Name of the device group to sync BIG-IP device to.'),
-            required=True
+            required=False
         ),
         DEVICE_GROUP_PARTITION: properties.Schema(
             properties.Schema.STRING,
             _('Partition name where device group is located on the device.'),
-            required=True
+            required=False
         )
     }
 
@@ -63,17 +63,55 @@ class F5CmSync(resource.Resource, F5BigIPMixin):
         '''
 
         try:
-            dg_name = self.properties[self.DEVICE_GROUP]
-            dg_part = self.properties[self.DEVICE_GROUP_PARTITION]
-            self.bigip.tm.cm.device_groups.device_group.exists(
-                name=dg_name, partition=dg_part
+            sync_status = self._get_sync_status(
+                device_group_name=None
             )
-            config_sync_cmd = 'config-sync to-group {}'.format(
-                self.properties[self.DEVICE_GROUP]
-            )
-            self.bigip.tm.cm.exec_cmd('run', utilCmdArgs=config_sync_cmd)
+            if not sync_status == 'in sync':
+                (device_name, device_group) = self._get_recommended_sync()
+                
+                
+            dgs = self.bigip.tm.cm.device_groups.get_collection()
+            # until iControl REST support visibility into
+            # each device group's sync state, you must sync
+            # all non autoSync groups to make global
+            # state maching 'in-sync'.
+            for dg in dgs:
+                if dg.autoSync == 'disabled':
+                    config_sync_cmd = 'config-sync to-group {}'.format(
+                        dg.name
+                    )
+                    self.bigip.tm.cm.exec_cmd(
+                        'run', utilCmdArgs=config_sync_cmd
+                    )
+            sync_status = self.bigip.tm.cm.sync_status
+            sync_status.refresh()
+            
+                    
         except Exception as ex:
             raise exception.ResourceFailure(ex, None, action='CREATE')
+
+    def _get_sync_status(self, device_group_name):
+        sync_status = self.bigip.tm.cm.sync_status
+        sync_status.refresh()
+        status = \
+            (sync_status.entries['https://localhost/mgmt/tm/cm/sync-status/0']
+             ['nestedStats']['entries']['status']['description'])
+        return status.lower()
+
+    def _get_recommended_sync(self):
+        sync_status = self.bigip.tm.cm.sync_status
+        sync_status.refresh()
+        details = (sync_status.entries
+                   ['https://localhost/mgmt/tm/cm/sync-status/0']
+                   ['nestedStats']['entries']
+                   ['https://localhost/mgmt/tm/cm/syncStatus/0/details']
+                   ['nestedStats']['entries'])
+        for detail in details:
+            desc = (details[detail]['nestedStats']
+                           ['entries']['details']['description'])
+            if 'Recommended action' in desc:
+                source_device = 
+
 
     @f5_bigip
     def check_create_complete(self, token):
