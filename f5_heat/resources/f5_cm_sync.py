@@ -14,91 +14,71 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from time import sleep
 
 from heat.common import exception
 from heat.common.i18n import _
 from heat.engine import properties
 from heat.engine import resource
 
-from common.mixins import f5_bigip
-from common.mixins import F5BigIPMixin
+from __builtin__ import True
 
 
-class F5CmSync(resource.Resource, F5BigIPMixin):
+class F5CmSync(resource.Resource):
     '''Sync the device configuration to the device group.'''
 
     PROPERTIES = (
-        BIGIP_SERVER,
-        DEVICE_GROUP,
-        DEVICE_GROUP_PARTITION
+        DEVICES,
+        DELAY_BETWEEN_ATTEMPTS,
+        MAX_ATTEMPTS
     ) = (
-        'bigip_server',
-        'device_group',
-        'device_group_partition'
+        'devices',
+        'delay_between_attempts',
+        'max_attempts'
     )
 
     properties_schema = {
-        BIGIP_SERVER: properties.Schema(
-            properties.Schema.STRING,
-            _('Reference to the BigIP Server resource.'),
-            required=True
+        DEVICES: properties.Schema(
+            properties.Schema.LIST,
+            _('BigIP resource references for devices to sync.'),
+            required=True,
+            update_allowed=True
         ),
-        DEVICE_GROUP: properties.Schema(
-            properties.Schema.STRING,
-            _('Name of the device group to sync BIG-IP device to.'),
-            required=False
+        DELAY_BETWEEN_ATTEMPTS: properties.Schema(
+            properties.Schema.INTEGER,
+            _('Seconds to wait between sync queries'),
+            required=10,
+            default=True
         ),
-        DEVICE_GROUP_PARTITION: properties.Schema(
-            properties.Schema.STRING,
-            _('Partition name where device group is located on the device.'),
-            required=False
+        MAX_ATTEMPTS: properties.Schema(
+            properties.Schema.INTEGER,
+            _('Maximum number of connection attempts to try'),
+            required=False,
+            default=10
         )
     }
 
-    @f5_bigip
-    def handle_create(self):
-        '''Sync the configuration on the BIG-IP® device to the device group.
+    def _set_devices(self):
+        '''Retrieve the BIG-IP® connection from the F5::BigIP resource.'''
 
-        :raises: ResourceFailure exception
-        '''
-
-        try:
-            sync_status = self._get_sync_status(
-                device_group_name=None
+        self.devices = []
+        for device in self.properties[self.DEVICES]:
+            self.devices.append(
+                self.stack.resource_by_refid(device).get_bigip()
             )
-            if not sync_status == 'in sync':
-                (device_name, device_group) = self._get_recommended_sync()
-                
-                
-            dgs = self.bigip.tm.cm.device_groups.get_collection()
-            # until iControl REST support visibility into
-            # each device group's sync state, you must sync
-            # all non autoSync groups to make global
-            # state maching 'in-sync'.
-            for dg in dgs:
-                if dg.autoSync == 'disabled':
-                    config_sync_cmd = 'config-sync to-group {}'.format(
-                        dg.name
-                    )
-                    self.bigip.tm.cm.exec_cmd(
-                        'run', utilCmdArgs=config_sync_cmd
-                    )
-            sync_status = self.bigip.tm.cm.sync_status
-            sync_status.refresh()
-            
-                    
-        except Exception as ex:
-            raise exception.ResourceFailure(ex, None, action='CREATE')
 
-    def _get_sync_status(self, device_group_name):
-        sync_status = self.bigip.tm.cm.sync_status
-        sync_status.refresh()
-        status = \
-            (sync_status.entries['https://localhost/mgmt/tm/cm/sync-status/0']
-             ['nestedStats']['entries']['status']['description'])
-        return status.lower()
+    def _sync_all(self, bigip):
+        dgs = bigip.tm.cm.device_groups.get_collection()
+        for dg in dgs:
+            if dg.autoSync == 'disabled':
+                config_sync_cmd = 'config-sync to-group {}'.format(
+                    dg.name
+                )
+                self.bigip.tm.cm.exec_cmd(
+                    'run', utilCmdArgs=config_sync_cmd
+                )
 
-    def _get_recommended_sync(self):
+    def _sync_recommended(self):
         sync_status = self.bigip.tm.cm.sync_status
         sync_status.refresh()
         details = (sync_status.entries
@@ -110,29 +90,70 @@ class F5CmSync(resource.Resource, F5BigIPMixin):
             desc = (details[detail]['nestedStats']
                            ['entries']['details']['description'])
             if 'Recommended action' in desc:
-                source_device = 
+                parse_recommed = desc.split('Recommended action: Synchronize')
+                if len(parse_recommed) > 1:
+                    parse_device_and_group = \
+                        parse_recommed[1].split(' to group ')
+                    if len(parse_device_and_group) > 1:
+                        device_name = parse_device_and_group[0]
+                        device_group_name = parse_device_and_group[1]
+                        for device in self.devices:
+                            ds = device.tm.cm.devices.get_collection()
+                            for d in ds:
+                                if d.name == device_name and \
+                                   d.selfDevice == 'true':
+                                    config_sync_cmd = \
+                                        'config-sync to-group {}'.format(
+                                            device_group_name
+                                        )
+                                    device.tm.cm.exec_cmd(
+                                        'run', utilCmdArgs=config_sync_cmd
+                                    )
+                                    return True
+                        else:
+                            # no device in matched recommendation
+                            return False
+                    else:
+                        # could not parse device group to sync
+                        return False
+                else:
+                    # could not parse the recommendation
+                    return False
+            else:
+                # no recommendation present
+                return False
 
+    def handle_create(self):
+        '''Sync the configuration on the BIG-IP® devices.
 
-    @f5_bigip
-    def check_create_complete(self, token):
-        '''Determine whether the BIG-IP®'s sync status is 'In-Sync'.
-
-        :raises: ResourceFailure
+        :raises: ResourceFailure exception
         '''
+        self._set_devices()
 
-        sync_status = self.bigip.tm.cm.sync_status
-        sync_status.refresh()
-        status = \
-            (sync_status.entries['https://localhost/mgmt/tm/cm/sync-status/0']
-             ['nestedStats']['entries']['status']['description'])
-        if status.lower() == 'in sync':
+        if(len(self.devices) < 2):
             return True
-        return False
 
-    def handle_delete(self):
-        '''Delete sync resource, which has no communication with the device.'''
-
-        return True
+        try:
+            number_of_attempts = 0
+            sync_status = self.devices[0].tm.cm.sync_status
+            while(number_of_attempts < self.properties[self.MAX_ATTEMPTS]):
+                sync_status.refresh()
+                if sync_status.lower() == 'in sync':
+                    return True
+                else:
+                    if not self._sync_recommended():
+                        self._sync_all(self.devices[0])
+                    sleep(self.propertied[self.DELAY_BETWEEN_ATTEMPTS])
+                    number_of_attempts += 1
+            raise exception.ResourceFailure(
+                'Sync failed after %d attempts' % self.properties[
+                    self.MAX_ATTEMPTS
+                ],
+                None,
+                action='CREATE'
+            )
+        except Exception as ex:
+            raise exception.ResourceFailure(ex, None, action='CREATE')
 
 
 def resource_mapping():
