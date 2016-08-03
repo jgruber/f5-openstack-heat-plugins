@@ -52,14 +52,36 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
         BIGIP_SERVER,
         CONTINUE_ON_ERROR,
         DELAY_BETWEEN_ATTEMPTS,
-        MAX_ATTEMPTS
+        MAX_ATTEMPTS,
+        AFM,
+        AM,
+        APM,
+        ASM,
+        AVR,
+        FPS,
+        GTM,
+        LC,
+        LTM,
+        PEM,
+        SWG
     ) = (
         'license_pool_name',
         'bigiq_server',
         'bigip_server',
         'continue_on_error',
         'delay_between_attempts',
-        'max_attempts'
+        'max_attempts',
+        'afm',
+        'am',
+        'apm',
+        'asm',
+        'avr',
+        'fps',
+        'gtm',
+        'lc',
+        'ltm',
+        'pem',
+        'swg'
     )
 
     properties_schema = {
@@ -95,6 +117,72 @@ class F5BigIQLicensePoolUnmanagedMember(resource.Resource,
             _('Maximum number of connection attempts to try'),
             required=False,
             default=360
+        ),
+        AFM: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for AFM'),
+            required=False,
+            default='none'
+        ),
+        AM: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for AM'),
+            required=False,
+            default='none'
+        ),
+        APM: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for APM'),
+            required=False,
+            default='none'
+        ),
+        ASM: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for ASM'),
+            required=False,
+            default='none'
+        ),
+        AVR: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for AVR'),
+            required=False,
+            default='none'
+        ),
+        FPS: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for FPS'),
+            required=False,
+            default='none'
+        ),
+        GTM: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for GTM'),
+            required=False,
+            default='none'
+        ),
+        LC: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for LC'),
+            required=False,
+            default='none'
+        ),
+        LTM: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for LTM'),
+            required=False,
+            default='nominal'
+        ),
+        PEM: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for PEM'),
+            required=False,
+            default='none'
+        ),
+        SWG: properties.Schema(
+            properties.Schema.STRING,
+            _('Provisioning Level for SWG'),
+            required=False,
+            default='none'
         )
     }
 
