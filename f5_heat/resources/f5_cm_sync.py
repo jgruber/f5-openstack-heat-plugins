@@ -83,7 +83,7 @@ class F5CmSync(resource.Resource):
             dg_name = self.properties[self.DEVICE_GROUP_NAME]
             dg_partition = self.properties[self.DEVICE_GROUP_PARTITION]
             dg_type = self.properties[self.DEVICE_GROUP_TYPE]
-            dg = DeviceGroup(
+            DeviceGroup(
                 devices=self.devices,
                 device_group_name=dg_name,
                 device_group_type=dg_type,

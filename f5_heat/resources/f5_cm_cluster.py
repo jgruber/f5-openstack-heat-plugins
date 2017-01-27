@@ -27,7 +27,6 @@ from heat.engine import resource
 from f5.multi_device.cluster import ClusterManager
 from f5.sdk_exception import F5SDKError
 from f5.multi_device.exceptions import DeviceNotTrusted
-from f5.multi_device import cluster
 
 
 class DeviceNameNotUnique(Exception):
@@ -136,7 +135,32 @@ class F5CmCluster(resource.Resource):
                 self.stack.resource_by_refid(device).get_bigip()
             )
 
+    def _assure_device_names(self):
+        '''Assure that all devices have unique device names.'''
+        try:
+            device_names = []
+            for d in self.devices:
+                known_devices = d.tm.cm.devices.get_collection()
+                for kd in known_devices:
+                    if kd.selfDevice:
+                        if kd.name in device_names:
+                            raise DeviceNameNotUnique(kd.name)
+                        else:
+                            device_names.append(kd.name)
+        except DeviceNameNotUnique:
+            try:
+                self._rename_devices(self.devices)
+            except Exception as ex:
+                raise exception.ResourceFailure(ex, None, action='CREATE')
+        except Exception as ex:
+            sdex = F5SDKError(
+                "Could not rename devices while creating cluster: %s" %
+                ex.message
+            )
+            raise exception.ResourceFailure(sdex, None, action='CREATE')
+
     def _rename_devices(self, devices):
+        '''Rename all devices to make them unique.'''
         for device in devices:
             ds = device.tm.cm.devices.get_collection()
             for d in ds:
@@ -150,7 +174,36 @@ class F5CmCluster(resource.Resource):
                         utilCmdArgs=bash_cmd
                     )
 
+    def _assure_ha_interface(self):
+        '''Assure that all devices have their HA interface set.'''
+        try:
+            if self.properties[self.HA_INTERFACE]:
+                self._configure_device_ha_interfaces(
+                    self.devices, self.HA_INTERFACE
+                )
+            else:
+                for d in self.devices:
+                    known_devices = d.tm.cm.devices.get_collection()
+                    for kd in known_devices:
+                        if kd.configsyncIp == 'none':
+                            raise DeviceMissingHAInterface(kd.name)
+        except DeviceMissingHAInterface:
+            try:
+                self._configure_device_ha_interfaces(self.devices, '1.1')
+            except Exception as ex:
+                raise exception.ResourceFailure(ex, None, action='CREATE')
+        except Exception as ex:
+            sdex = F5SDKError(
+                "Could not rename devices while creating cluster: %s" %
+                ex.message
+            )
+            raise exception.ResourceFailure(sdex, None, action='CREATE')
+
     def _configure_device_ha_interfaces(self, devices, ha_int=None):
+        '''Configure HA interface on all devices'''
+        ha_interface = self.properties[self.HA_INTERFACE]
+        if not ha_interface:
+            ha_interface = '1.1'
         for device in devices:
             ds = device.tm.cm.devices.get_collection()
             for d in ds:
@@ -163,7 +216,7 @@ class F5CmCluster(resource.Resource):
                         )
                         interfaces = vlan.interfaces_s.get_collection()
                         for interface in interfaces:
-                            if interface.name == '1.1':
+                            if interface.name == ha_interface:
                                 ha_ip = os.path.dirname(selfip.address)
                                 d.configsyncIp = ha_ip
                                 unicast_ip = [
@@ -196,52 +249,8 @@ class F5CmCluster(resource.Resource):
             )
             raise exception.ResourceFailure(sdex, None, action='CREATE')
 
-        # Check devices have unique device names
-        try:
-            device_names = []
-            for d in self.devices:
-                known_devices = d.tm.cm.devices.get_collection()
-                for kd in known_devices:
-                    if kd.selfDevice:
-                        if kd.name in device_names:
-                            raise DeviceNameNotUnique(kd.name)
-                        else:
-                            device_names.append(kd.name)
-        except DeviceNameNotUnique:
-            try:
-                self._rename_devices(self.devices)
-            except Exception as ex:
-                raise exception.ResourceFailure(ex, None, action='CREATE')
-        except Exception as ex:
-            sdex = F5SDKError(
-                "Could not rename devices while creating cluster: %s" %
-                ex.message
-            )
-            raise exception.ResourceFailure(sdex, None, action='CREATE')
-
-        # check a cluster sync interface is set
-        try:
-            if self.properties[self.HA_INTERFACE]:
-                self._configure_device_ha_interfaces(
-                    self.devices, self.HA_INTERFACE
-                )
-            else:
-                for d in self.devices:
-                    known_devices = d.tm.cm.devices.get_collection()
-                    for kd in known_devices:
-                        if kd.configsyncIp == 'none':
-                            raise DeviceMissingHAInterface(kd.name)
-        except DeviceMissingHAInterface:
-            try:
-                self._configure_device_ha_interfaces(self.devices, '1.1')
-            except Exception as ex:
-                raise exception.ResourceFailure(ex, None, action='CREATE')
-        except Exception as ex:
-            sdex = F5SDKError(
-                "Could not rename devices while creating cluster: %s" %
-                ex.message
-            )
-            raise exception.ResourceFailure(sdex, None, action='CREATE')
+        self._assure_device_names()
+        self._assure_ha_interface()
 
         # cluster devices
         try:
@@ -355,4 +364,3 @@ class F5CmCluster(resource.Resource):
 
 def resource_mapping():
     return {'F5::Cm::Cluster': F5CmCluster}
-
