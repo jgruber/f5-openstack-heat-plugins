@@ -62,5 +62,10 @@ target/
 # Pycharm
 .idea/
 
+# Eclipse IDE
+.project
+.pydevproject
+.settings
+
 # Dockerfile
 Dockerfile
