@@ -1,4 +1,0 @@
--e .
-Sphinx>=1.4.1
-six>=1.10.0
-sphinx-rtd-theme

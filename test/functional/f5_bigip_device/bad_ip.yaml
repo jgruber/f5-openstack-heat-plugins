@@ -1,8 +1,0 @@
-heat_template_version: 2015-04-30
-resources:
-  bigip_rsrc:
-    type: F5::BigIP::Device
-    properties:
-      username: test_un
-      password: test_pw
-      ip: 10.0.0.d
