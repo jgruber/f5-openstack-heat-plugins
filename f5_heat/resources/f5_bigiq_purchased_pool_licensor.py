@@ -159,7 +159,7 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
                             bigiq_license_pool_name,
                             bigip_management_ip, bigip_username,
                             bigip_password)
-        return self.member_uuid
+        return self.license_uuid
 
     def _release_license(self, bigiq_host, bigiq_username, 
                          bigiq_password, bigiq_timeout, 
