@@ -194,7 +194,7 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
                 member_uuid
             )
             delete_body = {
-                'uuid': member['uuid'],
+                'uuid': member_uuid,
                 'username': bigip_username,
                 'password': bigip_password
             }
@@ -243,7 +243,6 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
             respJson = response.json()
             self.license_uuid = respJson['uuid']            
             self.pool_uuid = pool_uuid
-            self.regkey = regkey
             self.resource_id_set(respJson['uuid'])
             attempts = 30
             member_licensing = True
@@ -264,10 +263,10 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
                 response = biq.get(member_url)
                 response.raise_for_status()
                 respJson = response.json()
-                if respJson['status'] == 'LICENSED':
+                if respJson['state'] == 'LICENSED':
                     member_licensing = False
                 else:
-                    member_last_state = respJson['status']
+                    member_last_state = respJson['state']
                     sleep(5)
 
     def _get_bigiq_session(self, bigiq_host, bigiq_username,
@@ -293,29 +292,6 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
         bigiq.base_url='https://%s/mgmt/cm/device/licensing/pool' % bigiq_host
         return bigiq
 
-    def _get_bigiq_session(self, bigiq_host, bigiq_username,
-                           bigiq_password, bigiq_timeout):
-        if requests.__version__ < '2.9.1':
-            requests.packages.urllib3.disable_warnings()
-        bigiq = requests.Session()
-        bigiq.verify = False
-        bigiq.headers.update({'Content-Type': 'application/json'})
-        bigiq.timeout = bigiq_timeout
-        token_auth_body = { 'username': bigiq_username,
-                            'password': bigiq_password,
-                            'loginProviderName': 'local' }
-        login_url = "https://%s/mgmt/shared/authn/login" % (bigiq_host)
-        response = bigiq.post(login_url,
-                              json=token_auth_body,
-                              verify=False,
-                              auth=requests.auth.HTTPBasicAuth(
-                                  bigiq_username, bigiq_password))
-        respJson = response.json()
-        bigiq.headers.update(
-            {'X-F5-Auth-Token': respJson['token']['token']})
-        bigiq.base_url='https://%s/mgmt/cm/device/licensing/pool' % bigiq_host
-        return bigiq
-        
     def _get_pool_id(self, bigiq_session, pool_name):
         pools_url = '%s/purchased-pool/licenses' %  \
                                                   bigiq_session.base_url
@@ -332,7 +308,7 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
         pools_url = '%s/purchased-pool/licenses' %  \
                                                   bigiq_session.base_url
         members_url = '%s/%s/members' % (pools_url, pool_id)
-        response = biq.get(members_url)
+        response = bigiq_session.get(members_url)
         response.raise_for_status()
         respJson = response.json()
         members = respJson['items']
