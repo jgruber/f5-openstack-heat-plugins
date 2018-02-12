@@ -321,7 +321,8 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
         pools = respJson['items']
         for pool in pools:
             if pool['name'] == pool_name:
-                return pool['id']
+                if str(pool['kind']).find('pool:regkey') > 1:   
+                    return pool['id']
         raise  Exception('No RegKey License pool %s found' % pool_name)
 
     def _get_member_id(self, bigiq_session, pool_id, mgmt_ip):
