@@ -53,7 +53,6 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
         BIGIQ_CONNECTION_TIMEOUT,
         BIGIQ_LICENSE_POOL_NAME,
         BIGIQ_LICENSE_TYPE,
-        BIGIQ_LICENSE_TERM,
         BIGIP_MANAGEMENT_IP,
         BIGIP_USERNAME,
         BIGIP_PASSWORD
@@ -64,7 +63,6 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
         'biqiq_connection_timeout',
         'bigiq_license_pool_name',
         'bigiq_license_type',
-        'bigiq_license_term',
         'bigip_management_ip',
         'bigip_username',
         'bigip_password'
@@ -103,11 +101,6 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
         BIGIQ_LICENSE_TYPE: properties.Schema(
             properties.Schema.STRING,
             _('BIGIQ License Type for BIG-IPs.'),
-            required=True
-        ),
-        BIGIQ_LICENSE_TERM: properties.Schema(
-            properties.Schema.STRING,
-            _('BIGIQ License Term for BIG-IPs.'),
             required=True
         ),
         BIGIP_MANAGEMENT_IP: properties.Schema(
@@ -196,8 +189,7 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
     def _license(self, bigiq_host, bigiq_username,
                  bigiq_password, bigiq_timeout,
                  bigiq_license_pool_name, bigiq_license_type,
-                 bigiq_license_term, bigip_management_ip,
-                 bigip_username, bigip_password):
+                 bigip_management_ip, bigip_username, bigip_password):
         '''License BIG-IP from BIG-IQ Pool.
 
         :returns: license_uuid
@@ -215,7 +207,6 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
                             bigiq_password, bigiq_timeout,
                             bigiq_license_pool_name,
                             bigiq_license_type,
-                            bigiq_license_term,
                             bigip_management_ip,
                             bigip_username,
                             bigip_password)
@@ -300,8 +291,7 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
     def _create_member(self, bigiq_host, bigiq_username,
                        bigiq_password, bigiq_timeout,
                        bigiq_license_pool_name, bigiq_license_type,
-                       bigiq_license_term, bigip_management_ip,
-                       bigip_username, bigip_password):
+                       bigip_management_ip, bigip_username, bigip_password):
         biq = self._get_bigiq_session(bigiq_host, bigiq_username,
                                       bigiq_password, bigiq_timeout)
 
@@ -334,7 +324,7 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
                         member_body = {
                            'deviceAddress': bigip_management_ip,
                            'httpsPort': 443,
-                           'unitOfMeasure': bigiq_license_term,
+                           'unitOfMeasure': self.license_term,
                            'username': bigip_username,
                            'password': bigip_password
                         }
@@ -401,6 +391,7 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
         for pool in pools:
             if pool['name'] == pool_name:
                 if str(pool['kind']).find('pool:utility') > 1:
+                    self.license_term = pool['unitsOfMeasure'][0]
                     return pool['regKey']
         raise PoolNotFoundException('No Utility pool %s found' % pool_name)
 
@@ -451,7 +442,6 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
             bigiq_license_pool_name = \
                 self.properties[self.BIGIQ_LICENSE_POOL_NAME]
             self.license_type = self.PROPERTIES[self.LICENSE_TYPE]
-            self.license_term = self.PROPERTIES[self.license_term]
             bigip_management_ip = \
                 self.properties[self.BIGIP_MANAGEMENT_IP]
             bigip_username = self.properties[self.BIGIP_USERNAME]
@@ -459,8 +449,7 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
             self._license(bigiq_host, bigiq_username,
                           bigiq_password, bigiq_timeout,
                           bigiq_license_pool_name, self.license_type,
-                          self.license_term, bigip_management_ip,
-                          bigip_username, bigip_password)
+                          bigip_management_ip, bigip_username, bigip_password)
         except Exception as ex:
             raise exception.ResourceFailure(ex, None, action='CREATE')
         return True
@@ -482,7 +471,6 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):
             bigiq_license_pool_name = \
                 self.properties[self.BIGIQ_LICENSE_POOL_NAME]
             self.license_type = self.PROPERTIES[self.LICENSE_TYPE]
-            self.license_term = self.PROPERTIES[self.license_term]
             bigip_management_ip = \
                 self.properties[self.BIGIP_MANAGEMENT_IP]
             bigip_username = self.properties[self.BIGIP_USERNAME]
