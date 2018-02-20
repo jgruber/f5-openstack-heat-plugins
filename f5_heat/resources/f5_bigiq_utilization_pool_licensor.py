@@ -37,7 +37,7 @@ class MemberNotFoundException(Exception):
     pass
 
 
-class NoRegKeyAvailable(Exception):
+class NoOfferingAvailable(Exception):
     pass
 
 
@@ -52,6 +52,8 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
         BIGIQ_PASSWORD,
         BIGIQ_CONNECTION_TIMEOUT,
         BIGIQ_LICENSE_POOL_NAME,
+        BIGIQ_LICENSE_TYPE,
+        BIGIQ_LICENSE_TERM,
         BIGIP_MANAGEMENT_IP,
         BIGIP_USERNAME,
         BIGIP_PASSWORD
@@ -61,6 +63,8 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
         'bigiq_password',
         'biqiq_connection_timeout',
         'bigiq_license_pool_name',
+        'bigiq_license_type',
+        'bigiq_license_term',
         'bigip_management_ip',
         'bigip_username',
         'bigip_password'
@@ -96,6 +100,16 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
             _('BIGIQ Pool to License BIG-IPs.'),
             required=True
         ),
+        BIGIQ_LICENSE_TYPE: properties.Schema(
+            properties.Schema.STRING,
+            _('BIGIQ License Type for BIG-IPs.'),
+            required=True
+        ),
+        BIGIQ_LICENSE_TERM: properties.Schema(
+            properties.Schema.STRING,
+            _('BIGIQ License Term for BIG-IPs.'),
+            required=True
+        ),
         BIGIP_MANAGEMENT_IP: properties.Schema(
             properties.Schema.STRING,
             _('BIGIP hostname or IP address to license.'),
@@ -116,11 +130,15 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
 
     ATTRIBUTES = (
         POOL_UUID,
-        REGKEY,
+        LICENSE_TYPE,
+        LICENSE_TERM,
+        OFFERING_UUID,
         LICENSE_UUID
     ) = (
         'pool_uuid',
-        'regkey',
+        'license_type',
+        'license_term',
+        'offering_uuid',
         'license_uuid'
     )
 
@@ -130,7 +148,17 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
            type=attributes.Schema.STRING,
            support_status=support.SupportStatus(version='5.0.0')
         ),
-        REGKEY: attributes.Schema(
+        LICENSE_TYPE: attributes.Schema(
+           _('LICENSE_TYPE.'),
+           type=attributes.Schema.STRING,
+           support_status=support.SupportStatus(version='5.0.0')
+        ),
+        LICENSE_TERM: attributes.Schema(
+           _('LICENSE_TERM.'),
+           type=attributes.Schema.STRING,
+           support_status=support.SupportStatus(version='5.0.0')
+        ),
+        OFFERING_UUID: attributes.Schema(
            _('REGKEY.'),
            type=attributes.Schema.STRING,
            support_status=support.SupportStatus(version='5.0.0')
@@ -143,7 +171,9 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
     }
 
     pool_uuid = None
-    regkey = None
+    license_type = None
+    license_term = None
+    offering_uuid = None
     license_uuid = None
 
     def _resolve_attribute(self, name):
@@ -151,8 +181,12 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
             return
         if name == self.POOL_UUID:
             return self.pool_uuid
-        if name == self.REGKEY:
-            return self.regkey
+        if name == self.LICENSE_TYPE:
+            return self.license_type
+        if name == self.LICENSE_TERM:
+            return self.license_term
+        if name == self.OFFERING_UUID:
+            return self.offering_uuid
         if name == self.LICENSE_UUID:
             return self.license_uuid
 
@@ -161,7 +195,8 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
 
     def _license(self, bigiq_host, bigiq_username,
                  bigiq_password, bigiq_timeout,
-                 bigiq_license_pool_name, bigip_management_ip,
+                 bigiq_license_pool_name, bigiq_license_type,
+                 bigiq_license_term, bigip_management_ip,
                  bigip_username, bigip_password):
         '''License BIG-IP from BIG-IQ Pool.
 
@@ -170,21 +205,26 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
         self._delete_member(bigiq_host, bigiq_username,
                             bigiq_password, bigiq_timeout,
                             bigiq_license_pool_name,
-                            bigip_management_ip, bigip_username,
+                            bigiq_license_type,
+                            bigip_management_ip,
+                            bigip_username,
                             bigip_password)
 
         # license as an unmanaged device
         self._create_member(bigiq_host, bigiq_username,
                             bigiq_password, bigiq_timeout,
                             bigiq_license_pool_name,
-                            bigip_management_ip, bigip_username,
+                            bigiq_license_type,
+                            bigiq_license_term,
+                            bigip_management_ip,
+                            bigip_username,
                             bigip_password)
         return self.license_uuid
 
     def _release_license(self, bigiq_host, bigiq_username,
                          bigiq_password, bigiq_timeout,
-                         bigiq_license_pool_name, bigip_management_ip,
-                         bigip_username, bigip_password):
+                         bigiq_license_pool_name, bigiq_license_type,
+                         bigip_management_ip, bigip_username, bigip_password):
         '''Release license to BIG-IQ Pool.
 
         :returns: None
@@ -193,6 +233,7 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
             self._delete_member(bigiq_host, bigiq_username,
                                 bigiq_password, bigiq_timeout,
                                 bigiq_license_pool_name,
+                                bigiq_license_type,
                                 bigip_management_ip, bigip_username,
                                 bigip_password)
         except MemberNotFoundException:
@@ -212,23 +253,21 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
 
     def _delete_member(self, bigiq_host, bigiq_username,
                        bigiq_password, bigiq_timeout,
-                       bigiq_license_pool_name, bigip_management_ip,
-                       bigip_username, bigip_password):
-        bigiq_timeout = self.CONNECTION_TIMEOUT
+                       bigiq_license_pool_name, bigiq_license_type,
+                       bigip_management_ip, bigip_username, bigip_password):
         biq = self._get_bigiq_session(bigiq_host, bigiq_username,
                                       bigiq_password, bigiq_timeout)
         if not self.pool_uuid:
             self.pool_uuid = self._get_pool_id(biq, bigiq_license_pool_name)
-
         if not self.license_uuid:
-            (self.regkey, self.license_uuid) = self._get_member_id(
-                biq, self.pool_uuid, bigip_management_ip)
+            self.license_uuid = self._get_member_id(
+                biq, self.pool_uuid, bigiq_license_type, bigip_management_ip)
         if self.license_uuid:
             member_url = \
-                '%s/regkey/licenses/%s/offerings/%s/members/%s' % (
+                '%s/utility/licenses/%s/offerings/%s/members/%s' % (
                     biq.base_url,
                     self.pool_uuid,
-                    self.regkey,
+                    self.offering_uuid,
                     self.license_uuid
                 )
             delete_body = {
@@ -253,15 +292,16 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
                             member_url, response.status_code))
                     sleep(5)
                 else:
+                    self.license_uuid = None
                     return True
             return False
         return True
 
     def _create_member(self, bigiq_host, bigiq_username,
                        bigiq_password, bigiq_timeout,
-                       bigiq_license_pool_name, bigip_management_ip,
+                       bigiq_license_pool_name, bigiq_license_type,
+                       bigiq_license_term, bigip_management_ip,
                        bigip_username, bigip_password):
-        bigiq_timeout = self.CONNECTION_TIMEOUT
         biq = self._get_bigiq_session(bigiq_host, bigiq_username,
                                       bigiq_password, bigiq_timeout)
 
@@ -269,8 +309,8 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
             self.pool_uuid = self._get_pool_id(biq, bigiq_license_pool_name)
         if not self.license_uuid:
             try:
-                (self.regkey, self.license_uuid) = self._get_member_id(
-                    biq, self.pool_uuid, bigip_management_ip)
+                self.license_uuid = self._get_member_id(
+                    biq, self.pool_uuid, bigiq_license_type, bigip_management_ip)
             except MemberNotFoundException:
                 attempts = 30
                 member_licensing = True
@@ -288,20 +328,22 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
                         )
                     attempts -= 1
                     try:
-                        if not self.regkey:
-                            self.regkey = self._get_first_available_reg_key(
-                                biq, self.pool_uuid)
+                        if not self.offering_uuid:
+                            self.offering_uuid = self._get_offering(
+                                biq, self.pool_uuid, bigiq_license_type)
                         member_body = {
                            'deviceAddress': bigip_management_ip,
+                           'httpsPort': 443,
+                           'unitOfMeasure': bigiq_license_term,
                            'username': bigip_username,
                            'password': bigip_password
                         }
                         if not self.license_uuid:
                             members_url = \
-                                '%s/regkey/licenses/%s/offerings/%s/members' \
+                                '%s/utility/licenses/%s/offerings/%s/members' \
                                 % (biq.base_url,
                                    self.pool_uuid,
-                                   self.regkey)
+                                   self.offering_uuid)
                             response = biq.post(members_url, json=member_body)
                             response.raise_for_status()
                             respJson = response.json()
@@ -351,54 +393,48 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
         return bigiq
 
     def _get_pool_id(self, bigiq_session, pool_name):
-        pools_url = '%s/regkey/licenses' % bigiq_session.base_url
+        pools_url = '%s/utility/licenses' % bigiq_session.base_url
         response = bigiq_session.get(pools_url)
         response.raise_for_status()
         respJson = response.json()
         pools = respJson['items']
         for pool in pools:
             if pool['name'] == pool_name:
-                if str(pool['kind']).find('pool:regkey') > 1:
-                    return pool['id']
-        raise PoolNotFoundException('No RegKey pool %s found' % pool_name)
+                if str(pool['kind']).find('pool:utility') > 1:
+                    return pool['regKey']
+        raise PoolNotFoundException('No Utility pool %s found' % pool_name)
 
-    def _get_member_id(self, bigiq_session, pool_id, mgmt_ip):
-        pools_url = '%s/regkey/licenses' % bigiq_session.base_url
+    def _get_member_id(self, bigiq_session, pool_id, license_type, mgmt_ip):
+        pools_url = '%s/utility/licenses' % bigiq_session.base_url
         offerings_url = '%s/%s/offerings' % (pools_url, pool_id)
-        response = bigiq_session.get(offerings_url)
-        response.raise_for_status()
-        respJson = response.json()
-        offerings = respJson['items']
-        for offering in offerings:
-            members_url = '%s/%s/members' % (
-                offerings_url, offering['regKey'])
-            response = bigiq_session.get(members_url)
-            if not response.status_code == 404:
-                response.raise_for_status()
+        if not self.offering_uuid:
+            self.offering_uuid = self._get_offering(bigiq_session,
+                                                    pool_id,
+                                                    license_type)
+        members_url = '%s/%s/members' % (offerings_url, self.offering_uuid)
+        response = bigiq_session.get(members_url)
+        if not response.status_code == 404:
+            response.raise_for_status()
             respJson = response.json()
             members = respJson['items']
             for member in members:
                 if member['deviceAddress'] == mgmt_ip:
-                    return (offering['regKey'], member['id'])
-        raise MemberNotFoundException('No member %s found in pool %s' % (
-            member['deviceAddress'], pool_id))
+                    return member['id']
+        raise MemberNotFoundException('No member %s found in pool %s for %s'
+            % (member['deviceAddress'], pool_id, self.offering_uuid))
 
-    def _get_first_available_reg_key(self, bigiq_session, pool_id):
-        pools_url = '%s/regkey/licenses' % bigiq_session.base_url
+    def _get_offering(self, bigiq_session, pool_id, license_type):
+        pools_url = '%s/utility/licenses' % bigiq_session.base_url
         offerings_url = '%s/%s/offerings' % (pools_url, pool_id)
         response = bigiq_session.get(offerings_url)
         response.raise_for_status()
         respJson = response.json()
         offerings = respJson['items']
         for offering in offerings:
-            members_url = '%s/%s/members' % (
-                offerings_url, offering['regKey'])
-            response = bigiq_session.get(members_url)
-            response.raise_for_status()
-            respJson = response.json()
-            if len(respJson['items']) == 0:
+            if offering['name'] == license_type:
                 return offering['regKey']
-        raise NoRegKeyAvailable('No RegKey available in pool %s' % pool_id)
+        raise NoOfferingAvailable('No Offering for %s available in pool %s'
+                                  % (license_type, pool_id))
 
     @log_helpers.log_method_call
     def handle_create(self):
@@ -414,13 +450,16 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
                 self.properties[self.BIGIQ_CONNECTION_TIMEOUT]
             bigiq_license_pool_name = \
                 self.properties[self.BIGIQ_LICENSE_POOL_NAME]
+            self.license_type = self.PROPERTIES[self.LICENSE_TYPE]
+            self.license_term = self.PROPERTIES[self.license_term]
             bigip_management_ip = \
                 self.properties[self.BIGIP_MANAGEMENT_IP]
             bigip_username = self.properties[self.BIGIP_USERNAME]
             bigip_password = self.properties[self.BIGIP_PASSWORD]
             self._license(bigiq_host, bigiq_username,
                           bigiq_password, bigiq_timeout,
-                          bigiq_license_pool_name, bigip_management_ip,
+                          bigiq_license_pool_name, self.license_type,
+                          self.license_term, bigip_management_ip,
                           bigip_username, bigip_password)
         except Exception as ex:
             raise exception.ResourceFailure(ex, None, action='CREATE')
@@ -442,6 +481,8 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
                 self.properties[self.BIGIQ_CONNECTION_TIMEOUT]
             bigiq_license_pool_name = \
                 self.properties[self.BIGIQ_LICENSE_POOL_NAME]
+            self.license_type = self.PROPERTIES[self.LICENSE_TYPE]
+            self.license_term = self.PROPERTIES[self.license_term]
             bigip_management_ip = \
                 self.properties[self.BIGIP_MANAGEMENT_IP]
             bigip_username = self.properties[self.BIGIP_USERNAME]
@@ -449,8 +490,8 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
             self._release_license(bigiq_host, bigiq_username,
                                   bigiq_password, bigiq_timeout,
                                   bigiq_license_pool_name,
-                                  bigip_management_ip, bigip_username,
-                                  bigip_password)
+                                  self.license_type, bigip_management_ip,
+                                  bigip_username, bigip_password)
         except Exception as ex:
             raise exception.ResourceFailure(ex, None, action='DELETE')
         return True
