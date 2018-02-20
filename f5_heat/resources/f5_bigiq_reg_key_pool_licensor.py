@@ -269,6 +269,7 @@ class F5BigIQUtilizationPoolLicensor(resource.Resource):
                             member_url, response.status_code))
                     sleep(5)
                 else:
+                    self.license_uuid = None
                     return True
             return False
         return True
