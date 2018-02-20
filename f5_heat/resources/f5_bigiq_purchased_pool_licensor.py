@@ -29,6 +29,14 @@ from oslo_log import helpers as log_helpers
 from time import sleep
 
 
+class PoolNotFoundException(Exception):
+    pass
+
+
+class MemberNotFoundException(Exception):
+    pass
+
+
 class F5BigIQPurchasedPoolLicensor(resource.Resource):
     '''Manages F5® License Resources.'''
 
@@ -167,11 +175,24 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
 
         :returns: None
         '''
-        self._delete_member(bigiq_host, bigiq_username,
-                            bigiq_password, bigiq_timeout,
-                            bigiq_license_pool_name,
-                            bigip_management_ip, bigip_username,
-                            bigip_password)
+        try:
+            self._delete_member(bigiq_host, bigiq_username,
+                                bigiq_password, bigiq_timeout,
+                                bigiq_license_pool_name,
+                                bigip_management_ip, bigip_username,
+                                bigip_password)
+        except MemberNotFoundException:
+            msg = 'request to release license %s for % failed because no \
+                   allocated license was found.' % (
+                       self.license_uuid, bigip_management_ip)
+            logging.error(msg)
+            self.license_uuid = None
+        except PoolNotFoundException:
+            msg = 'request to release license %s for %s failed because %s \
+                   pool was not found.' % (
+                       self.license_uuid, bigip_management_ip,
+                       bigiq_license_pool_name)
+            self.license_uuid = None
         self.license_uuid = None
         return None
 
@@ -179,20 +200,22 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
                        bigiq_password, bigiq_timeout,
                        bigiq_license_pool_name, bigip_management_ip,
                        bigip_username, bigip_password):
-        bigiq_timeout = self.CONNECTION_TIMEOUT
         biq = self._get_bigiq_session(bigiq_host, bigiq_username,
                                       bigiq_password, bigiq_timeout)
-        pool_uuid = self._get_pool_id(biq, bigiq_license_pool_name)
-        member_uuid = self._get_member_id(biq, pool_uuid,
-                                          bigip_management_ip)
-        if member_uuid:
+
+        if not self.pool_uuid:
+            self.pool_uuid = self._get_pool_id(biq, bigiq_license_pool_name)
+        if not self.license_uuid:
+            self.license_uuid = self._get_member_id(
+                biq, self.pool_uuid, bigip_management_ip)
+        if self.license_uuid:
             member_url = '%s/purchased-pool/licenses/%s/members/%s' % (
                 biq.base_url,
-                pool_uuid,
-                member_uuid
+                self.pool_uuid,
+                self.license_uuid
             )
             delete_body = {
-                'uuid': member_uuid,
+                'uuid': self.license_uuid,
                 'username': bigip_username,
                 'password': bigip_password
             }
@@ -220,57 +243,67 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
                        bigiq_password, bigiq_timeout,
                        bigiq_license_pool_name, bigip_management_ip,
                        bigip_username, bigip_password):
-        bigiq_timeout = self.CONNECTION_TIMEOUT
         biq = self._get_bigiq_session(bigiq_host, bigiq_username,
                                       bigiq_password, bigiq_timeout)
-        pool_uuid = self._get_pool_id(biq, bigiq_license_pool_name)
-        member_uuid = self._get_member_id(biq, pool_uuid,
-                                          bigip_management_ip)
-        if not member_uuid:
-            member_body = {
-                'deviceAddress': bigip_management_ip,
-                'username': bigip_username,
-                'password': bigip_password
-            }
-            members_url = '%s/purchased-pool/licenses/%s/members' % (
-                biq.base_url,
-                pool_uuid
-            )
-            response = biq.post(members_url, json=member_body)
-            response.raise_for_status()
-            respJson = response.json()
-            self.license_uuid = respJson['uuid']
-            self.pool_uuid = pool_uuid
-            self.resource_id_set(respJson['uuid'])
-            attempts = 30
-            member_licensing = True
-            member_last_state = 'UNKNOWN'
-            while member_licensing:
-                if attempts == 0:
-                    ex = Exception(
-                        "device %s activation state is %s" %
-                        (bigip_management_ip, member_last_state)
-                    )
-                    raise exception.ResourceFailure(
-                        ex,
-                        None,
-                        action='CREATE'
-                    )
-                attempts -= 1
-                member_url = '%s/%s' % (members_url, self.license_uuid)
-                response = biq.get(member_url)
-                response.raise_for_status()
-                respJson = response.json()
-                if respJson['state'] == 'LICENSED':
-                    member_licensing = False
-                else:
-                    member_last_state = respJson['state']
-                    sleep(5)
+        if not self.pool_uuid:
+            self.pool_uuid = self._get_pool_id(biq, bigiq_license_pool_name)
+        if not self.license_uuid:
+            try:
+                self.license_uuid = self._get_member_id(
+                    biq, self.pool_uuid, bigip_management_ip)
+            except MemberNotFoundException:
+                attempts = 30
+                member_licensing = True
+                member_last_state = 'UNKNOWN'
+                while member_licensing:
+                    if attempts == 0:
+                        ex = Exception(
+                            "device %s activation state is %s" %
+                            (bigip_management_ip, member_last_state)
+                        )
+                        raise exception.ResourceFailure(
+                            ex,
+                            None,
+                            action='CREATE'
+                        )
+                    attempts -= 1
+                    try:
+                        if not self.license_uuid:
+                            member_body = {
+                                'deviceAddress': bigip_management_ip,
+                                'username': bigip_username,
+                                'password': bigip_password
+                            }
+                            members_url = \
+                                '%s/purchased-pool/licenses/%s/members' % (
+                                    biq.base_url,
+                                    self.pool_uuid
+                                )
+                            response = biq.post(members_url, json=member_body)
+                            response.raise_for_status()
+                            respJson = response.json()
+                            self.license_uuid = respJson['uuid']
+                            self.resource_id_set(respJson['uuid'])
+                        member_url = '%s/%s' % (members_url, self.license_uuid)
+                        response = biq.get(member_url)
+                        response.raise_for_status()
+                        respJson = response.json()
+                        if respJson['state'] == 'LICENSED':
+                            member_licensing = False
+                        else:
+                            member_last_state = respJson['state']
+                            sleep(5)
+                    except Exception as ex:
+                        logging.error('error allocating license to %s: %s'
+                                      % (bigip_management_ip, ex.message))
+                        logging.error('%n remaining licensing attempts for %s'
+                                      % attempts, bigip_management_ip)
+                        sleep(5)
 
     def _get_bigiq_session(self, bigiq_host, bigiq_username,
                            bigiq_password, bigiq_timeout):
         if requests.__version__ < '2.9.1':
-            requests.packages.urllib3.disable_warnings()
+            requests.packages.urllib3.disable_warnings()  # @UndefinedVariable
         bigiq = requests.Session()
         bigiq.verify = False
         bigiq.headers.update({'Content-Type': 'application/json'})
@@ -292,7 +325,7 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
         return bigiq
 
     def _get_pool_id(self, bigiq_session, pool_name):
-        pools_url = '%s/purchased-pool/licenses' %  \
+        pools_url = '%s/purchased-pool/licenses?$select=id,kind,name' %  \
                                                   bigiq_session.base_url
         response = bigiq_session.get(pools_url)
         response.raise_for_status()
@@ -302,7 +335,7 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
             if pool['name'] == pool_name:
                 if str(pool['kind']).find('pool:purchased') > 1:
                     return pool['uuid']
-        raise Exception('No Purchased License pool %s found' % pool_name)
+        raise PoolNotFoundException('No Purchased pool %s found' % pool_name)
 
     def _get_member_id(self, bigiq_session, pool_id, mgmt_ip):
         pools_url = '%s/purchased-pool/licenses' %  \
@@ -315,7 +348,8 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
         for member in members:
             if member['deviceAddress'] == mgmt_ip:
                 return member['uuid']
-        return None
+        raise MemberNotFoundException('No member %s found in pool %s' % (
+            member['deviceAddress'], pool_id))
 
     @log_helpers.log_method_call
     def handle_create(self):
