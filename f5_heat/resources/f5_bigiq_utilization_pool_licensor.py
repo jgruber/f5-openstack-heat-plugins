@@ -41,7 +41,7 @@ class NoOfferingAvailable(Exception):
     pass
 
 
-class F5BigIQRegKeyPoolLicensor(resource.Resource):
+class F5BigIQUtilityPoolLicensor(resource.Resource):
     '''Manages F5® License Resources.'''
 
     support_status = support.SupportStatus(version='2014.1')
@@ -159,7 +159,7 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
            support_status=support.SupportStatus(version='5.0.0')
         ),
         OFFERING_UUID: attributes.Schema(
-           _('REGKEY.'),
+           _('OFFERING_UUID.'),
            type=attributes.Schema.STRING,
            support_status=support.SupportStatus(version='5.0.0')
         ),
@@ -498,5 +498,5 @@ class F5BigIQRegKeyPoolLicensor(resource.Resource):
 
 
 def resource_mapping():
-    return {'F5::BigIQ::RegKeyPoolLicensor':
-            F5BigIQRegKeyPoolLicensor}
+    return {'F5::BigIQ::UtilityPoolLicensor':
+            F5BigIQUtilityPoolLicensor}
