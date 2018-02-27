@@ -15,14 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 from oslo_log import helpers as log_helpers
 
 from f5_heat.licensors.bigiq.bigiq_host import F5BigIQHost
 from f5_heat.licensors.bigiq.bigiq_pool_member import F5BigIQLicensePoolMember
-from f5_heat.licensors.bigiq.purchased_pool import PurchasedPoolLicensor
+from f5_heat.licensors.bigiq.utility_pool import UtilityPoolLicensor
 
 from f5_heat.licensors.bigiq.exceptions import PoolNotFoundException
+from f5_heat.licensors.bigiq.exceptions import NoOfferingAvailable
 from f5_heat.licensors.bigiq.exceptions import MemberNotFoundException
 
 from heat.common import exception
@@ -33,7 +33,7 @@ from heat.engine import resource
 from heat.engine import support
 
 
-class F5BigIQPurchasedPoolLicensor(resource.Resource):
+class F5BigIQUtilityPoolLicensor(resource.Resource):  #pylint: disable=too-many-instance-attributes
     '''Manages F5 BIG-IQ License Resource for BIG-IPs.'''
 
     support_status = support.SupportStatus(version='2014.1')
@@ -44,6 +44,7 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
         BIGIQ_PASSWORD,
         BIGIQ_CONNECTION_TIMEOUT,
         BIGIQ_LICENSE_POOL_NAME,
+        BIGIQ_LICENSE_TYPE,
         BIGIP_MANAGEMENT_IP,
         BIGIP_MANAGEMENT_PORT,
         BIGIP_USERNAME,
@@ -54,6 +55,7 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
         'bigiq_password',
         'biqiq_connection_timeout',
         'bigiq_license_pool_name',
+        'bigiq_license_type',
         'bigip_management_ip',
         'bigip_management_port',
         'bigip_username',
@@ -90,6 +92,11 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
             _('BIGIQ Pool to License BIG-IPs.'),
             required=True
         ),
+        BIGIQ_LICENSE_TYPE: properties.Schema(
+            properties.Schema.STRING,
+            _('BIGIQ License Type for BIG-IPs.'),
+            required=True
+        ),
         BIGIP_MANAGEMENT_IP: properties.Schema(
             properties.Schema.STRING,
             _('BIGIP hostname or IP address to license.'),
@@ -116,15 +123,36 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
 
     ATTRIBUTES = (
         POOL_UUID,
+        LICENSE_TYPE,
+        LICENSE_TERM,
+        OFFERING_UUID,
         LICENSE_UUID
     ) = (
         'pool_uuid',
+        'license_type',
+        'license_term',
+        'offering_uuid',
         'license_uuid'
     )
 
     attributes_schema = {
         POOL_UUID: attributes.Schema(
            _('POOL UUID.'),
+           type=attributes.Schema.STRING,
+           support_status=support.SupportStatus(version='5.0.0')
+        ),
+        LICENSE_TYPE: attributes.Schema(
+           _('LICENSE_TYPE.'),
+           type=attributes.Schema.STRING,
+           support_status=support.SupportStatus(version='5.0.0')
+        ),
+        LICENSE_TERM: attributes.Schema(
+           _('LICENSE_TERM.'),
+           type=attributes.Schema.STRING,
+           support_status=support.SupportStatus(version='5.0.0')
+        ),
+        OFFERING_UUID: attributes.Schema(
+           _('OFFERING_UUID.'),
            type=attributes.Schema.STRING,
            support_status=support.SupportStatus(version='5.0.0')
         ),
@@ -143,6 +171,15 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
         if name == self.POOL_UUID:
             if self.licensor:
                 return self.licensor.pool_uuid
+        if name == self.LICENSE_TYPE:
+            if self.licensor:
+                return self.licensor.license_type
+        if name == self.LICENSE_TERM:
+            if self.licensor:
+                return self.licensor.license_term
+        if name == self.OFFERING_UUID:
+            if self.licensor:
+                return self.licensor.offering_uuid
         if name == self.LICENSE_UUID:
             if self.licensor:
                 return self.licensor.member_uuid
@@ -172,9 +209,9 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
                 bigip_username=self.properties[self.BIGIP_USERNAME],
                 bigip_password=self.properties[self.BIGIP_PASSWORD]
             )
-            self.licensor = PurchasedPoolLicensor(bigiq, member)
+            self.licensor = UtilityPoolLicensor(
+                bigiq, member, self.properties[self.LICENSE_TYPE])
             self.licensor.activate_license()
-            self.resource_id_set(self.licensor.member_uuid)
         except Exception as ex:
             raise exception.ResourceFailure(ex, None, action='CREATE')
         return True
@@ -203,12 +240,16 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
                 bigip_username=self.properties[self.BIGIP_USERNAME],
                 bigip_password=self.properties[self.BIGIP_PASSWORD]
             )
-            self.licensor = PurchasedPoolLicensor(bigiq, member)
+            self.licensor = UtilityPoolLicensor(
+                bigiq, member, self.properties[self.LICENSE_TYPE])
             self.licensor.revoke_license()
+        except PoolNotFoundException:
+            # always allow delete, error will be logged
+            pass
         except MemberNotFoundException:
             # always allow delete, error will be logged
             pass
-        except PoolNotFoundException:
+        except NoOfferingAvailable:
             # always allow delete, error will be logged
             pass
         except Exception as ex:
@@ -218,5 +259,5 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
 
 def resource_mapping():
     ''' Registration for Heat Resource '''
-    return {'F5::BigIQ::PurchasedPoolLicensor':
-            F5BigIQPurchasedPoolLicensor}
+    return {'F5::BigIQ::UtilityPoolLicensor':
+            F5BigIQUtilityPoolLicensor}
