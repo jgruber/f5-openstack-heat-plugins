@@ -100,9 +100,9 @@ class RegkeyPoolLicensor(object):
                                     self.member_uuid, self.member)
         except NoOfferingAvailable as noe:
             msg = 'request to release license %s for %s failed. %s' % (
-                       self.member_uuid,
-                       self.member.bigip_management_ip,
-                       noe.message)
+                self.member_uuid,
+                self.member.bigip_management_ip,
+                noe.message)
             logging.error(msg)
             self.regkey = None
             self.member_uuid = None
@@ -110,7 +110,7 @@ class RegkeyPoolLicensor(object):
         except MemberNotFoundException as mnfe:
             msg = 'request to release license %s for % failed because no \
                    allocated license was found.' % (
-                       self.member_uuid, self.member.bigip_management_ip)
+                self.member_uuid, self.member.bigip_management_ip)
             logging.error(msg)
             self.regkey = None
             self.member_uuid = None
@@ -121,7 +121,7 @@ class RegkeyPoolLicensor(object):
         return None
 
     @classmethod
-    def _revoke_member(cls, bigiq_session=None, pool_id=None, regkey=None,  #pylint: disable=too-many-arguments
+    def _revoke_member(cls, bigiq_session=None, pool_id=None, regkey=None,  # pylint: disable=too-many-arguments
                        member_id=None, member=None):
         ''' Revoke a license based
         :param: bigiq_session: BIG-IQ session object
@@ -140,8 +140,8 @@ class RegkeyPoolLicensor(object):
             if not regkey:
                 (regkey, member_id) = \
                     cls._get_regkey_by_management_ip(
-                            bigiq_session, pool_id,
-                            member.bigip_management_ip)
+                        bigiq_session, pool_id,
+                        member.bigip_management_ip)
             else:
                 member_id = \
                     cls._get_member_id(
@@ -248,14 +248,15 @@ class RegkeyPoolLicensor(object):
         '''
         pools_url = '%s/regkey/licenses?$select=id,kind,name' % \
             bigiq_session.base_url
-        query_filter = '&$filter=name%20eq%20%27'+pool_name+'%27'
-        pools_url = "%s%s" % (pools_url, query_filter)
+        # No need to check both name and uuid for match. Can't filter.
+        # query_filter = '&$filter=name%20eq%20%27'+pool_name+'%27'
+        # pools_url = "%s%s" % (pools_url, query_filter)
         response = bigiq_session.get(pools_url)
         response.raise_for_status()
         response_json = response.json()
         pools = response_json['items']
         for pool in pools:
-            if pool['name'] == pool_name:
+            if pool['name'] == pool_name or pool['id'] == pool_name:
                 if str(pool['kind']).find('pool:regkey') > 1:
                     return pool['id']
         raise PoolNotFoundException('No RegKey pool %s found' % pool_name)
@@ -305,7 +306,7 @@ class RegkeyPoolLicensor(object):
         return response_json['status']
 
     @staticmethod
-    def _create_member(bigiq_session, pool_id, regkey, bigip_management_ip,  #pylint: disable=too-many-arguments
+    def _create_member(bigiq_session, pool_id, regkey, bigip_management_ip,  # pylint: disable=too-many-arguments
                        bigip_username, bigip_password):
         ''' Create a BIG-IP License Pool Member.
         :param: bigiq_session: BIG-IQ session object
@@ -331,7 +332,7 @@ class RegkeyPoolLicensor(object):
         return response_json['id']
 
     @staticmethod
-    def _delete_member(bigiq_session, pool_id, regkey, member_id,  #pylint: disable=too-many-arguments
+    def _delete_member(bigiq_session, pool_id, regkey, member_id,  # pylint: disable=too-many-arguments
                        bigip_username, bigip_password):
         ''' Delete a BIG-IP License Pool Member.
         :param: bigiq_session: BIG-IQ session object

@@ -33,7 +33,7 @@ from heat.engine import resource
 from heat.engine import support
 
 
-class F5BigIQUtilityPoolLicensor(resource.Resource):  #pylint: disable=too-many-instance-attributes
+class F5BigIQUtilityPoolLicensor(resource.Resource):  # pylint: disable=too-many-instance-attributes
     '''Manages F5 BIG-IQ License Resource for BIG-IPs.'''
 
     support_status = support.SupportStatus(version='2014.1')
@@ -123,13 +123,13 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):  #pylint: disable=too-many-
 
     ATTRIBUTES = (
         POOL_UUID,
-        LICENSE_TYPE,
+        OFFERING,
         LICENSE_TERM,
         OFFERING_UUID,
         LICENSE_UUID
     ) = (
         'pool_uuid',
-        'license_type',
+        'offering',
         'license_term',
         'offering_uuid',
         'license_uuid'
@@ -137,29 +137,29 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):  #pylint: disable=too-many-
 
     attributes_schema = {
         POOL_UUID: attributes.Schema(
-           _('POOL UUID.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('POOL UUID.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         ),
-        LICENSE_TYPE: attributes.Schema(
-           _('LICENSE_TYPE.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+        OFFERING: attributes.Schema(
+            _('OFFERING.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         ),
         LICENSE_TERM: attributes.Schema(
-           _('LICENSE_TERM.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('LICENSE_TERM.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         ),
         OFFERING_UUID: attributes.Schema(
-           _('OFFERING_UUID.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('OFFERING_UUID.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         ),
         LICENSE_UUID: attributes.Schema(
-           _('License UUID.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('License UUID.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         )
     }
 
@@ -171,9 +171,9 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):  #pylint: disable=too-many-
         if name == self.POOL_UUID:
             if self.licensor:
                 return self.licensor.pool_uuid
-        if name == self.LICENSE_TYPE:
+        if name == self.OFFERING:
             if self.licensor:
-                return self.licensor.license_type
+                return self.licensor.offering
         if name == self.LICENSE_TERM:
             if self.licensor:
                 return self.licensor.license_term
@@ -210,7 +210,7 @@ class F5BigIQUtilityPoolLicensor(resource.Resource):  #pylint: disable=too-many-
                 bigip_password=self.properties[self.BIGIP_PASSWORD]
             )
             self.licensor = UtilityPoolLicensor(
-                bigiq, member, self.properties[self.LICENSE_TYPE])
+                bigiq, member, self.properties[self.OFFERING])
             self.licensor.activate_license()
         except Exception as ex:
             raise exception.ResourceFailure(ex, None, action='CREATE')

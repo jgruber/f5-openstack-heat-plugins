@@ -46,7 +46,7 @@ class F5BigIQHost(object):
     def get_bigiq_session(self):
         ''' Creates a Requests Session to the BIG-IQ host configured '''
         if requests.__version__ < '2.9.1':
-            requests.packages.urllib3.disable_warnings()  #pylint: disable=no-member
+            requests.packages.urllib3.disable_warnings()  # pylint: disable=no-member
         bigiq = requests.Session()
         bigiq.verify = False
         bigiq.headers.update({'Content-Type': 'application/json'})

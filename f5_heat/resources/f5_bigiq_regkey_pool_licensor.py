@@ -127,19 +127,19 @@ class F5BigIQRegkeyPoolLicensor(resource.Resource):
 
     attributes_schema = {
         POOL_UUID: attributes.Schema(
-           _('POOL UUID.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('POOL UUID.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         ),
         REGKEY: attributes.Schema(
-           _('REGKEY.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('REGKEY.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         ),
         LICENSE_UUID: attributes.Schema(
-           _('License UUID.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('License UUID.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         )
     }
 

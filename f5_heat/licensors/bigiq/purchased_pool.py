@@ -90,7 +90,7 @@ class PurchasedPoolLicensor(object):
         except MemberNotFoundException as mnfe:
             msg = 'request to release license %s for %s failed because no \
                    allocated license was found.' % (
-                       self.member_uuid, self.member.bigip_management_ip)
+                self.member_uuid, self.member.bigip_management_ip)
             logging.error(msg)
             self.member_uuid = None
             raise mnfe
@@ -145,7 +145,7 @@ class PurchasedPoolLicensor(object):
         )
 
     @classmethod
-    def _activate_member(cls, bigiq_session=None, pool_id=None,  member=None):
+    def _activate_member(cls, bigiq_session=None, pool_id=None, member=None):
         ''' Activate a BIG-IP as a BIG-IQ license pool member
         :param: bigiq_session: BIG-IQ session object
         :param: pool_id: BIG-IQ pool ID
@@ -205,14 +205,15 @@ class PurchasedPoolLicensor(object):
         '''
         pools_url = "%s/purchased-pool/licenses?$select=uuid,kind,name" %  \
                     bigiq_session.base_url
-        query_filter = '&$filter=name%20eq%20%27'+pool_name+'%27'
-        pools_url = "%s%s" % (pools_url, query_filter)
+        # No need to check both name and uuid for match. Can't filter.
+        # query_filter = '&$filter=name%20eq%20%27'+pool_name+'%27'
+        # pools_url = "%s%s" % (pools_url, query_filter)
         response = bigiq_session.get(pools_url)
         response.raise_for_status()
         response_json = response.json()
         pools = response_json['items']
         for pool in pools:
-            if pool['name'] == pool_name:
+            if pool['name'] == pool_name or pool['uuid'] == pool_name:
                 if str(pool['kind']).find('pool:purchased') > 1:
                     return pool['uuid']
         raise PoolNotFoundException('No Purchased pool %s found' % pool_name)

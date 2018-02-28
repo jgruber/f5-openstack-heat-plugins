@@ -32,7 +32,7 @@ from f5_heat.licensors.bigiq.exceptions import PoolNotFoundException
 class UtilityPoolLicensor(object):
     '''Workflows to support BIG-IQ utility pools'''
 
-    license_type = None
+    offering = None
     license_term = None
 
     member_uuid = None
@@ -43,7 +43,7 @@ class UtilityPoolLicensor(object):
     member = None
 
     def __init__(self, bigiq_host=None,
-                 bigiq_pool_member=None, license_type=None):
+                 bigiq_pool_member=None, offering=None):
         if not isinstance(bigiq_host, F5BigIQHost):
             raise AssertionError(str(
                 'bigiq_host must be an instance of ',
@@ -55,9 +55,9 @@ class UtilityPoolLicensor(object):
                 'f5_heat.licensors.',
                 'bigiq.bigiq_pool_member.F5BigIQLicensePoolMember'))
         self.member = bigiq_pool_member
-        if not license_type:
+        if not offering:
             raise NoOfferingAvailable('license type is not defined')
-        self.license_type = license_type
+        self.offering = offering
 
     def activate_license(self):
         '''License BIG-IP from BIG-IQ Pool.
@@ -72,7 +72,7 @@ class UtilityPoolLicensor(object):
                     biq, self.member.bigiq_license_pool_name)
         if not self.offering_uuid:
             self.offering_uuid = self._get_offering(
-                biq, self.pool_uuid, self.license_type)
+                biq, self.pool_uuid, self.offering)
         try:
             if not self.member_uuid:
                 self.member_uuid = self._get_member_id(
@@ -102,7 +102,7 @@ class UtilityPoolLicensor(object):
                         biq, self.member.bigiq_license_pool_name)
             if not self.offering_uuid:
                 self.offering_uuid = self._get_offering(
-                    biq, self.pool_uuid, self.license_type)
+                    biq, self.pool_uuid, self.offering)
             if not self.member_uuid:
                 self.member_uuid = self._get_member_id(
                     biq, self.pool_uuid, self.offering_uuid,
@@ -111,16 +111,16 @@ class UtilityPoolLicensor(object):
                                 self.member_uuid, self.member)
         except NoOfferingAvailable as noae:
             msg = 'request to release license %s for %s failed. %s' % (
-                       self.member_uuid,
-                       self.member.bigip_management_ip,
-                       noae.message)
+                self.member_uuid,
+                self.member.bigip_management_ip,
+                noae.message)
             logging.error(msg)
             self.member_uuid = None
             raise noae
         except MemberNotFoundException as mnfe:
             msg = 'request to release license %s for % failed because no \
                    allocated license was found.' % (
-                       self.member_uuid, self.member.bigip_management_ip)
+                self.member_uuid, self.member.bigip_management_ip)
             logging.error(msg)
             self.member_uuid = None
             raise mnfe
@@ -128,7 +128,7 @@ class UtilityPoolLicensor(object):
         return None
 
     @classmethod
-    def _revoke_member(cls, bigiq_session=None, pool_id=None, offering_id=None,  #pylint: disable=too-many-arguments
+    def _revoke_member(cls, bigiq_session=None, pool_id=None, offering_id=None,  # pylint: disable=too-many-arguments
                        member_id=None, member=None):
         ''' Revoke a license based
         :param: bigiq_session: BIG-IQ session object
@@ -180,7 +180,7 @@ class UtilityPoolLicensor(object):
         )
 
     @classmethod
-    def _activate_member(cls, bigiq_session=None, pool_id=None,  #pylint: disable=too-many-arguments
+    def _activate_member(cls, bigiq_session=None, pool_id=None,  # pylint: disable=too-many-arguments
                          offering_id=None, license_term=None, member=None):
         ''' Activate a BIG-IP as a BIG-IQ license pool member
         :param: bigiq_session: BIG-IQ session object
@@ -247,14 +247,15 @@ class UtilityPoolLicensor(object):
         pools_url = \
             '%s/utility/licenses?$select=regKey,kind,name,unitsOfMeasure' % \
             bigiq_session.base_url
-        query_filter = '&$filter=name%20eq%20%27'+pool_name+'%27'
-        pools_url = "%s%s" % (pools_url, query_filter)
+        # No need to check both name and uuid for match. Can't filter.
+        # query_filter = '&$filter=name%20eq%20%27'+pool_name+'%27'
+        # pools_url = "%s%s" % (pools_url, query_filter)
         response = bigiq_session.get(pools_url)
         response.raise_for_status()
         response_json = response.json()
         pools = response_json['items']
         for pool in pools:
-            if pool['name'] == pool_name:
+            if pool['name'] == pool_name or pool['regkey'] == pool_name:
                 if str(pool['kind']).find('pool:utility') > 1:
                     license_term = pool['unitsOfMeasure'][0]
                     return (pool['regKey'], license_term)
@@ -292,7 +293,7 @@ class UtilityPoolLicensor(object):
         ''' Get Regkey offering by license type
         :param: bigiq_session: BIG-IQ session object
         :param: pool_id: BIG-IQ pool ID
-        :param: license_type: Regkey offering type
+        :param: offering: Regkey offering type
         :returns: Regkey string
         :raises: NoOfferingAvailable
         :raises: requests.exceptions.HTTPError
@@ -300,7 +301,7 @@ class UtilityPoolLicensor(object):
         pools_url = '%s/utility/licenses' % bigiq_session.base_url
         offerings_url = '%s/%s/offerings?$select=id,kind,name' % (
             pools_url, pool_id)
-        query_filter = '&$filter=name%20eq%20%27'+license_type+'%27'
+        query_filter = '&$filter=name%20eq%20%27' + license_type + '%27'
         offerings_url = "%s%s" % (offerings_url, query_filter)
         response = bigiq_session.get(offerings_url)
         response.raise_for_status()
@@ -335,7 +336,7 @@ class UtilityPoolLicensor(object):
         return response_json['status']
 
     @staticmethod
-    def _create_member(bigiq_session, pool_id, offering_id, license_term, #pylint: disable=too-many-arguments
+    def _create_member(bigiq_session, pool_id, offering_id, license_term,  # pylint: disable=too-many-arguments
                        bigip_management_ip, bigip_management_port,
                        bigip_username, bigip_password):
         ''' Create a BIG-IP License Pool Member.
@@ -367,7 +368,7 @@ class UtilityPoolLicensor(object):
         return response_json['id']
 
     @staticmethod
-    def _delete_member(bigiq_session, pool_id, offering_id,  #pylint: disable=too-many-arguments
+    def _delete_member(bigiq_session, pool_id, offering_id,  # pylint: disable=too-many-arguments
                        member_id, bigip_username, bigip_password):
         ''' Delete a BIG-IP License Pool Member.
         :param: bigiq_session: BIG-IQ session object

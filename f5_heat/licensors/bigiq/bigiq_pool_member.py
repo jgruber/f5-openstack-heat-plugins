@@ -19,7 +19,7 @@
 import requests
 
 
-class F5BigIQLicensePoolMember(object):  #pylint: disable=too-many-instance-attributes
+class F5BigIQLicensePoolMember(object):  # pylint: disable=too-many-instance-attributes
     ''' BIG-IQ Pool Member Licensing '''
     bigiq_license_pool_name = None
     bigip_management_ip = None
@@ -30,7 +30,7 @@ class F5BigIQLicensePoolMember(object):  #pylint: disable=too-many-instance-attr
     license_attempts = 30
     error_delay = 10
 
-    def __init__(self, bigiq_license_pool_name=None,  #pylint: disable=too-many-arguments
+    def __init__(self, bigiq_license_pool_name=None,  # pylint: disable=too-many-arguments
                  bigip_management_ip=None, bigip_username=None,
                  bigip_password=None, bigip_management_port=443,
                  bigip_timeout=10, license_attempts=30, error_delay=10):
@@ -60,7 +60,7 @@ class F5BigIQLicensePoolMember(object):  #pylint: disable=too-many-instance-attr
     def get_bigip_session(self):
         ''' Creates a Requests Session to the BIG-IP member configured '''
         if requests.__version__ < '2.9.1':
-            requests.packages.urllib3.disable_warnings()  #pylint: disable=no-member
+            requests.packages.urllib3.disable_warnings()  # pylint: disable=no-member
         bigip = requests.Session()
         bigip.verify = False
         bigip.headers.update({'Content-Type': 'application/json'})

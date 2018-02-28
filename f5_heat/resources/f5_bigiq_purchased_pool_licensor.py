@@ -124,14 +124,14 @@ class F5BigIQPurchasedPoolLicensor(resource.Resource):
 
     attributes_schema = {
         POOL_UUID: attributes.Schema(
-           _('POOL UUID.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('POOL UUID.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         ),
         LICENSE_UUID: attributes.Schema(
-           _('License UUID.'),
-           type=attributes.Schema.STRING,
-           support_status=support.SupportStatus(version='5.0.0')
+            _('License UUID.'),
+            type=attributes.Schema.STRING,
+            support_status=support.SupportStatus(version='5.0.0')
         )
     }
 
